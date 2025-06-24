@@ -27,14 +27,24 @@ class IncidentDatabase:
                     date_observed TEXT NOT NULL,
                     date_created TEXT NOT NULL,
                     status TEXT DEFAULT 'Open',
+                    level INTEGER DEFAULT 2,
                     last_updated TEXT,
                     FOREIGN KEY (user_id) REFERENCES sessions(user_id)
                 )
             """)
+            
+            # Add level column to existing table if it doesn't exist
+            try:
+                conn.execute("ALTER TABLE incidents ADD COLUMN level INTEGER DEFAULT 2")
+                conn.commit()
+            except sqlite3.OperationalError:
+                # Column already exists
+                pass
+            
             conn.commit()
     
     def create_incident(self, user_id: str, user_name: str, user_email: str,
-                       category: str, description: str, date_observed: str) -> Dict:
+                       category: str, description: str, date_observed: str, level: int = 2) -> Dict:
         """Create a new incident record."""
         # Generate incident ID
         incident_count = self.get_incident_count_for_user(user_id)
@@ -49,10 +59,10 @@ class IncidentDatabase:
             conn.execute("""
                 INSERT INTO incidents 
                 (id, user_id, user_name, user_email, category, description, 
-                 date_observed, date_created, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 date_observed, date_created, status, level)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (incident_id, user_id, user_name, user_email, category, 
-                  description, date_observed, date_created, BUG_REPORT_CONFIG["default_status"]))
+                  description, date_observed, date_created, BUG_REPORT_CONFIG["default_status"], level))
             conn.commit()
         
         return {
@@ -64,7 +74,8 @@ class IncidentDatabase:
             "description": description,
             "date_observed": date_observed,
             "date_created": date_created,
-            "status": BUG_REPORT_CONFIG["default_status"]
+            "status": BUG_REPORT_CONFIG["default_status"],
+            "level": level
         }
     
     def get_incidents_for_user(self, user_id: str) -> List[Dict]:

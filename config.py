@@ -26,7 +26,15 @@ BUG_REPORT_CONFIG = {
     "valid_statuses": ["Open", "In Progress", "Resolved", "Closed"],
     "default_status": "Open",
     "bug_id_prefix": "BUG-",
-    "bug_id_format": "{prefix}{id:04d}",  # e.g., BUG-0001
+    "bug_id_format": "{prefix}{id:05d}",  # e.g., BUG-0001
+    "valid_levels": {
+        1: "Simple FAQ questions (how-to, information requests)",
+        2: "Common technical/account issues (crashes, login problems)",
+        3: "Unstructured but solvable problems (save corruption, gameplay issues)",
+        4: "Security/fraud issues (hacking, stolen items)",
+        5: "Critical emergencies (doxxing, legal issues, server outages)"
+    },
+    "default_level": 2,
 }
 
 # Date Parsing Configuration
@@ -35,7 +43,7 @@ DATE_CONFIG = {
         "last month", "few weeks ago", "some time ago", 
         "a while ago", "recently", "long time ago"
     ],
-    "max_future_days": 1,  # Allow dates up to 1 day in the future
+    "max_future_days": 0,  # Allow dates up to 0 day in the future
     "default_timezone": "UTC",
 }
 
@@ -103,4 +111,12 @@ def get_database_name():
 
 def get_vague_date_expressions():
     """Get list of vague date expressions that need clarification."""
-    return DATE_CONFIG["vague_expressions"] 
+    return DATE_CONFIG["vague_expressions"]
+
+def get_bug_levels():
+    """Get valid bug levels."""
+    return BUG_REPORT_CONFIG["valid_levels"]
+
+def get_default_level():
+    """Get default bug level."""
+    return BUG_REPORT_CONFIG["default_level"] 

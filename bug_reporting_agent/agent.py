@@ -15,6 +15,7 @@ from config import (
     get_bug_categories, get_bug_statuses, get_default_user_id,
     get_vague_date_expressions, DATE_CONFIG, AGENT_CONFIG
 )
+from a2a_integration import notify_bug_report_created
 
 
 def parse_relative_date(date_text: str) -> str | None:
@@ -175,6 +176,9 @@ def create_bug_report(
     
     date_observed = parsed_date
 
+    # Use default level for initial creation - Guard Agent will update it later
+    level = 2  # Default level for new incidents
+
     # Get user information from session state
     user_name = tool_context.state.get("user_name", "")
     user_email = tool_context.state.get("user_email", "")
@@ -195,7 +199,8 @@ def create_bug_report(
         user_email=user_email,
         category=category,
         description=description,
-        date_observed=date_observed
+        date_observed=date_observed,
+        level=level
     )
     
     # Also update session state for backward compatibility
@@ -203,11 +208,25 @@ def create_bug_report(
     bug_reports.append(incident)
     tool_context.state["bug_reports"] = bug_reports
 
-    return {
+    result = {
         "action": "create_bug_report",
         "bug_report": incident,
         "message": f"Bug report {incident['id']} has been created successfully! I've recorded your {category.lower()} issue in our incident tracking system and will ensure it gets proper attention.",
     }
+    
+    # Notify A2A protocol - include the original description so Guard Agent can classify it
+    try:
+        notify_bug_report_created({
+            "bug_id": incident['id'],
+            "level": incident['level'],
+            "category": incident['category'],
+            "user_id": incident['user_id'],
+            "user_input": description  # Original user input for classification
+        })
+    except Exception as e:
+        print(f"[Bug Reporting Agent] A2A notification failed: {e}")
+
+    return result
 
 
 def view_bug_reports(tool_context: ToolContext) -> dict:

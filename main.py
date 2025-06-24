@@ -4,8 +4,10 @@ from dotenv import load_dotenv
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from bug_reporting_agent.agent import bug_reporting_agent
+from guard_agent.agent import GuardAgent, _guard_agent_a2a_callback
 from utils import call_agent_async
 from config import get_database_name, get_default_user_id, AGENT_CONFIG
+from a2a_integration import initialize_a2a_agents, register_guard_agent_callback
 
 load_dotenv()
 
@@ -29,6 +31,12 @@ async def main_async():
     # Setup constants from config
     APP_NAME = "Bug Reporting Agent"
     USER_ID = get_default_user_id()
+    
+    # Initialize A2A protocol and register Guard agent callback
+    print("🔧 Initializing A2A protocol...")
+    initialize_a2a_agents()
+    register_guard_agent_callback(_guard_agent_a2a_callback)
+    print("✅ A2A protocol initialized with Guard agent callback")
 
     # ===== PART 3: Session Management - Find or Create =====
     # Check for existing sessions for this user
