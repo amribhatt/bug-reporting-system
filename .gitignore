@@ -151,4 +151,9 @@ Thumbs.db
 
 # Project specific
 bug_reports.db
-test_*.py 
+test_*.py
+
+# Security and audit files (sensitive information)
+SECURITY_AUDIT.md
+security_*.md
+audit_*.md 

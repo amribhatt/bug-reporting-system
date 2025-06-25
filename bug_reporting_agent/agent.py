@@ -7,7 +7,7 @@ import sys
 import os
 import re
 import sqlite3
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 # Add the parent directory to the path to import database module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -273,58 +273,167 @@ def view_bug_reports(tool_context: ToolContext) -> dict:
     }
 
 
-def update_bug_status(bug_id: str, new_status: str, tool_context: ToolContext) -> dict:
-    """Update the status of a bug report.
+def get_status_options() -> str:
+    """Get formatted status options for user guidance."""
+    statuses = get_bug_statuses()
+    status_descriptions = {
+        "Open": "Initial status for new issues (default)",
+        "In Progress": "Issue is being actively worked on", 
+        "Resolved": "Issue has been fixed or addressed",
+        "Closed": "Issue is resolved and verified/no longer relevant"
+    }
+    
+    options = []
+    for status in statuses:
+        description = status_descriptions.get(status, "")
+        options.append(f"• **{status}:** {description}")
+    
+    return "\n".join(options)
 
+
+def update_bug_status(bug_id: str, new_status: str, tool_context: ToolContext) -> dict:
+    """Update the status of an existing bug report with sophisticated business rules.
+
+    Business Rules:
+    - Closed issues can only be reopened (to "Open")
+    - Other transitions follow normal flow
+    
     Args:
-        bug_id: The ID of the bug report to update
-        new_status: The new status (Open, In Progress, Resolved, Closed)
-        tool_context: Context for accessing and updating session state
+        bug_id: The bug report ID to update
+        new_status: The new status to set
+        tool_context: Context for accessing session state
 
     Returns:
-        A confirmation message
+        A confirmation message with update details
     """
-    print(f"--- Tool: update_bug_status called for {bug_id} to {new_status} ---")
+    print(f"--- Tool: update_bug_status called for {bug_id} -> {new_status} ---")
 
-    # Validate status
+    # Validate new status
     valid_statuses = get_bug_statuses()
     if new_status not in valid_statuses:
         return {
             "action": "update_bug_status",
             "status": "error",
-            "message": f"Invalid status. Please choose from: {', '.join(valid_statuses)}",
+            "message": f"""❌ **Invalid Status**
+
+'{new_status}' is not a valid status. Please choose from one of these options:
+
+{get_status_options()}
+
+**To update the status, please specify:**
+- The bug ID (e.g., BUG-00001)
+- One of the exact status names above
+
+**Example:** "Update BUG-00001 to In Progress" """,
         }
 
-    # Get user_id from session context - try multiple ways to get it
+    # Get user information from session state
     user_id = getattr(tool_context, 'user_id', None)
     if not user_id:
-        # Try to get from session state
         user_id = tool_context.state.get("_user_id", get_default_user_id())
-    
+
     # Initialize database
     db = IncidentDatabase()
     
-    # Update incident in database
+    # Get current incident to check existing status
+    current_incident = db.get_incident_by_id(bug_id, user_id)
+    if not current_incident:
+        return {
+            "action": "update_bug_status",
+            "status": "error",
+            "message": f"Bug report {bug_id} not found or you don't have permission to update it.",
+        }
+    
+    current_status = current_incident['status']
+    
+    # Check if status is already the same
+    if current_status.lower() == new_status.lower():
+        return {
+            "action": "update_bug_status",
+            "status": "warning",
+            "message": f"""📋 **Status Already Set**
+            
+Bug report {bug_id} is already marked as '{current_status}'.
+
+**Current status:** {current_status}
+**Requested status:** {new_status}
+
+No changes were made since the status is already correct.
+
+**Available status options:**
+{get_status_options()}
+
+**Would you like to:**
+• Update to a different status using one of the options above
+• View the full details of this bug report
+• Check the status of other bug reports by typing 'show my bug reports'""",
+            "current_status": current_status,
+            "requested_status": new_status,
+            "no_change_needed": True
+        }
+
+    # BUSINESS RULE: Closed issues can only be reopened to "Open"
+    if current_status == "Closed" and new_status != "Open":
+        return {
+            "action": "update_bug_status",
+            "status": "error",
+            "message": f"""🚫 **Invalid Status Transition**
+
+Bug report {bug_id} is currently **Closed** and can only be **reopened** (changed to "Open").
+
+**Current status:** {current_status}
+**Requested status:** {new_status}
+
+**Business Rule:** Once an issue is closed, it can only be reopened for further investigation. If you need to track progress on a reopened issue, first reopen it, then update to "In Progress" or other statuses.
+
+**To reopen this issue, say:** "Update {bug_id} to Open"
+
+**Available status options:**
+{get_status_options()}""",
+            "current_status": current_status,
+            "requested_status": new_status,
+            "business_rule_violated": True
+        }
+
+    # Update the incident status
     updated_incident = db.update_incident_status(bug_id, user_id, new_status)
     
     if updated_incident:
-        # Update session state for backward compatibility
-        incidents = db.get_incidents_for_user(user_id)
-        tool_context.state["bug_reports"] = incidents
+        # Update session state if needed
+        bug_reports = tool_context.state.get("bug_reports", [])
+        for report in bug_reports:
+            if report.get("id") == bug_id:
+                report["status"] = new_status
+                break
         
         return {
             "action": "update_bug_status",
-            "bug_id": bug_id,
-            "old_status": updated_incident["old_status"],
-            "new_status": new_status,
-            "message": f"Updated bug report {bug_id} status from '{updated_incident['old_status']}' to '{new_status}' in our incident tracking system",
-        }
+            "status": "success",
+            "message": f"""✅ **Status Updated Successfully**
 
-    return {
-        "action": "update_bug_status",
-        "status": "error",
-        "message": f"Bug report {bug_id} not found",
-    }
+Bug report {bug_id} has been updated:
+
+**Previous status:** {updated_incident.get('old_status', 'Unknown')}
+**New status:** {new_status}
+**Updated on:** {updated_incident['last_updated'][:10]}
+
+Your bug report status has been successfully changed. 
+
+**Available status options for future updates:**
+{get_status_options()}
+
+You can view all your reports by typing 'show my bug reports'.""",
+            "bug_id": bug_id,
+            "old_status": updated_incident.get('old_status', 'Unknown'),
+            "new_status": new_status,
+            "last_updated": updated_incident['last_updated']
+        }
+    else:
+        return {
+            "action": "update_bug_status",
+            "status": "error",
+            "message": f"Failed to update status for bug report {bug_id}. Please try again or contact support.",
+        }
 
 
 def update_user_info(name: str, email: str, tool_context: ToolContext) -> dict:
@@ -384,6 +493,27 @@ class BugReportingAgentCallbacks:
         print(f"[Bug Reporting Pre-Callback] Checking user input for user {user_id}")
         self.pre_callback_checks += 1
         
+        # Check if this is a status update request or viewing request - allow these through
+        status_keywords = ['resolve', 'resolved', 'close', 'closed', 'update', 'status', 'view', 'show', 'list', 'see my', 'my reports', 'my bugs']
+        bug_id_pattern = r'BUG-\d+'
+        
+        user_input_lower = user_input.lower()
+        
+        # If user is asking to view/list their bugs, always allow
+        if any(keyword in user_input_lower for keyword in ['view', 'show', 'list', 'see my', 'my reports', 'my bugs']):
+            return {
+                "proceed": True,
+                "message": "User requesting to view bugs - proceeding without duplicate check"
+            }
+        
+        # If user is updating status of an existing bug (contains BUG-ID + status keyword), allow
+        if any(keyword in user_input_lower for keyword in status_keywords) and re.search(bug_id_pattern, user_input, re.IGNORECASE):
+            return {
+                "proceed": True,
+                "message": "User updating existing bug status - proceeding without duplicate check"
+            }
+        
+        # Only perform duplicate detection for NEW bug report creation
         if not self.guard_agent_callback:
             print("[Bug Reporting Pre-Callback] Warning: Guard Agent callback not available")
             return {
@@ -402,34 +532,115 @@ class BugReportingAgentCallbacks:
                 duplicate_incident_id = duplicate_result.get("duplicate_incident_id")
                 
                 if duplicate_incident_id:
-                    # Check if user has a resolved incident with same description
-                    resolved_incident = self._check_for_resolved_similar_incident(user_input, user_id, duplicate_incident_id)
+                    # Get the duplicate incident details
+                    db = IncidentDatabase()
+                    duplicate_incident = db.get_incident_by_id(duplicate_incident_id, user_id)
                     
-                    if resolved_incident:
-                        # This is a repeated issue after resolution - send support email
-                        self.repeated_issues_detected += 1
-                        self.guard_agent_callback.handle_repeated_issue(
-                            user_id, user_email, user_input, resolved_incident['id']
-                        )
+                    if duplicate_incident:
+                        duplicate_status = duplicate_incident['status']
                         
-                        return {
-                            "proceed": False,
-                            "is_duplicate": True,
-                            "is_repeated_issue": True,
-                            "duplicate_incident_id": duplicate_incident_id,
-                            "resolved_incident_id": resolved_incident['id'],
-                            "summary": duplicate_result.get("summary", ""),
-                            "message": f"Repeated issue detected! Support team has been notified about this recurring problem. Original incident {resolved_incident['id']} was marked as resolved, but you're experiencing the same issue again.",
-                            "support_notified": True
-                        }
+                        # If duplicate is Open or In Progress, inform user about existing open issue
+                        if duplicate_status in ['Open', 'In Progress']:
+                            return {
+                                "proceed": False,
+                                "is_duplicate": True,
+                                "is_repeated_issue": False,
+                                "duplicate_incident_id": duplicate_incident_id,
+                                "summary": duplicate_result.get("summary", ""),
+                                "message": f"""📋 **Existing Open Issue Found**
+
+I found an existing **{duplicate_status.lower()}** incident ({duplicate_incident_id}) that appears to be the same issue.
+
+**Current incident status:** {duplicate_status}
+**Created:** {duplicate_incident['date_created'][:10]}
+
+**No new issue will be created.** A support representative will reach out to you regarding the existing open incident.
+
+**Would you like to:**
+1. **Check the status** of incident {duplicate_incident_id}
+2. **Add details** to the existing incident by contacting support
+3. **View all your reports** by typing 'show my bug reports'
+
+**Support Contact:** support@example.com (Reference: {duplicate_incident_id})""",
+                                "similarity_score": duplicate_result.get("similarity_score", 0),
+                                "existing_open_issue": True
+                            }
+                        
+                        # If duplicate is Resolved or Closed, check for other open issues
+                        elif duplicate_status in ['Resolved', 'Closed']:
+                            # Check if user has any other open/in-progress issues for same type
+                            open_issues = self._check_for_open_similar_incidents(user_input, user_id)
+                            
+                            if open_issues:
+                                # User has existing open issues - don't create new, inform about existing
+                                existing_issue = open_issues[0]  # Get the first open issue
+                                return {
+                                    "proceed": False,
+                                    "is_duplicate": True,
+                                    "is_repeated_issue": False,
+                                    "existing_open_incident_id": existing_issue['id'],
+                                    "resolved_incident_id": duplicate_incident_id,
+                                    "summary": duplicate_result.get("summary", ""),
+                                    "message": f"""📋 **Existing Open Issue Found**
+
+While your previous incident {duplicate_incident_id} was {duplicate_status.lower()}, you already have an **open** incident ({existing_issue['id']}) for a similar issue.
+
+**Existing open incident:** {existing_issue['id']} (Status: {existing_issue['status']})
+**Previous resolved incident:** {duplicate_incident_id} (Status: {duplicate_status})
+
+**No new issue will be created.** A support representative will reach out to you regarding your existing open incident {existing_issue['id']}.
+
+**Support Contact:** support@example.com (Reference: {existing_issue['id']})
+
+**Would you like to:**
+• View details of incident {existing_issue['id']}
+• Check all your reports by typing 'show my bug reports'""",
+                                    "existing_open_issue": True
+                                }
+                            else:
+                                # No open issues exist - create new issue and notify support about recurrence
+                                self.repeated_issues_detected += 1
+                                self.guard_agent_callback.handle_repeated_issue(
+                                    user_id, user_email, user_input, duplicate_incident_id
+                                )
+                                
+                                return {
+                                    "proceed": True,  # Allow new issue creation
+                                    "is_duplicate": False,  # Don't block, but flag as repeat
+                                    "is_repeated_issue": True,
+                                    "resolved_incident_id": duplicate_incident_id,
+                                    "summary": duplicate_result.get("summary", ""),
+                                    "message": f"""🚨 **Recurring Issue Detected**
+
+This appears to be the same issue as your previously {duplicate_status.lower()} incident {duplicate_incident_id}. Since you have no other open issues for this problem, a new incident will be created.
+
+**Our support team has been automatically notified** about this recurring issue and will prioritize your case.
+
+**Previous incident:** {duplicate_incident_id} (Status: {duplicate_status})
+
+**Support Contact:** support@example.com""",
+                                    "support_notified": True,
+                                    "create_new_issue": True
+                                }
                 
+                # Regular duplicate (not a repeat of resolved issue)
                 return {
                     "proceed": False,
                     "is_duplicate": True,
                     "is_repeated_issue": False,
                     "duplicate_incident_id": duplicate_incident_id,
                     "summary": duplicate_result.get("summary", ""),
-                    "message": duplicate_result.get("message", "Duplicate issue detected"),
+                    "message": f"""📋 **Similar Issue Found**
+
+I found an existing open incident ({duplicate_incident_id}) that appears to be the same issue.
+
+**Would you like to:**
+1. **Update the existing incident** with additional details
+2. **Check the status** of incident {duplicate_incident_id}
+3. **View all your reports** by typing 'show my bug reports'
+4. **Continue anyway** if this is actually a different issue
+
+To avoid duplicate reports, please check your existing incident first.""",
                     "similarity_score": duplicate_result.get("similarity_score", 0)
                 }
             
@@ -525,6 +736,47 @@ class BugReportingAgentCallbacks:
         except Exception as e:
             print(f"[Bug Reporting Callbacks] Error checking resolved incidents: {e}")
             return None
+
+    def _check_for_open_similar_incidents(self, user_input: str, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Check if user has any open/in-progress incidents similar to the current input.
+        
+        Args:
+            user_input: Current user input
+            user_id: User's ID
+            
+        Returns:
+            List of open/in-progress incidents if found, empty list otherwise
+        """
+        try:
+            db = IncidentDatabase()
+            open_incidents = []
+            
+            with sqlite3.connect(db.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute("""
+                    SELECT * FROM incidents 
+                    WHERE user_id = ? AND status IN ('Open', 'In Progress')
+                    ORDER BY date_created DESC
+                """, (user_id,))
+                
+                for row in cursor.fetchall():
+                    open_incident = dict(row)
+                    
+                    # Calculate similarity with open incident
+                    similarity = self._calculate_simple_similarity(
+                        user_input.lower(), open_incident['description'].lower()
+                    )
+                    
+                    # If similarity > 50%, consider it similar
+                    if similarity > 0.5:
+                        open_incidents.append(open_incident)
+            
+            return open_incidents
+            
+        except Exception as e:
+            print(f"[Bug Reporting Callbacks] Error checking open incidents: {e}")
+            return []
     
     def _calculate_simple_similarity(self, text1: str, text2: str) -> float:
         """Calculate simple similarity between two texts."""
@@ -633,9 +885,18 @@ bug_reporting_agent = Agent(
        - **Account:** Can't log in, wrong permissions, profile issues, password problems
        - **Other:** Hardware issues, general questions, anything else
 
-    6. **Additional Capabilities:**
+    6. **Status Update Guidance:**
+       When users want to update bug report statuses, guide them with available options:
+       - **Open:** Initial status for new issues (default)
+       - **In Progress:** Issue is being actively worked on
+       - **Resolved:** Issue has been fixed or addressed
+       - **Closed:** Issue is resolved and verified/no longer relevant
+       
+       Always present these 4 status options clearly when updating statuses.
+
+    7. **Additional Capabilities:**
        - View existing bug reports for the user (always display in tabular format)
-       - Update bug report statuses
+       - Update bug report statuses (with clear status options)
        - Update user contact information
        - Provide status updates on previously reported issues
 

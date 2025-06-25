@@ -35,6 +35,20 @@ def send_support_email(user_id: str, user_email: str, repeated_issue: str, origi
     """
     print(f"--- Tool: send_support_email called for repeated issue ---")
     
+    # Input validation and sanitization
+    if not all([user_id, user_email, repeated_issue, original_incident_id]):
+        return {
+            "action": "send_support_email",
+            "status": "error",
+            "message": "Missing required parameters for email notification"
+        }
+    
+    # Sanitize inputs to prevent injection
+    user_id = str(user_id).strip()[:50]  # Limit length
+    user_email = str(user_email).strip()[:100]
+    repeated_issue = str(repeated_issue).strip()[:1000]  # Limit issue description
+    original_incident_id = str(original_incident_id).strip()[:20]
+    
     # Get email configuration from centralized config
     try:
         support_email = get_support_email()
@@ -42,7 +56,16 @@ def send_support_email(user_id: str, user_email: str, repeated_issue: str, origi
         email_config = get_email_config()
         smtp_server = email_config["smtp_server"] if email_config else "smtp.gmail.com"
         smtp_port = email_config["smtp_port"] if email_config else 587
-        email_password = email_config["email_password"] if email_config else "your_password"
+        email_password = email_config["email_password"] if email_config else None
+        
+        # Security check: Ensure password is properly configured
+        if not email_password or email_password in ["your_password", "password", "default"]:
+            print(f"[EMAIL ALERT] Email password not configured securely")
+            return {
+                "action": "send_support_email",
+                "status": "disabled",
+                "message": "Email notifications require proper password configuration"
+            }
         
         # Check if email is enabled
         if not is_email_enabled():
@@ -51,6 +74,22 @@ def send_support_email(user_id: str, user_email: str, repeated_issue: str, origi
                 "action": "send_support_email",
                 "status": "disabled",
                 "message": "Email notifications are disabled in configuration"
+            }
+        
+        # Rate limiting: Check recent email alerts to prevent spam
+        email_alerts = tool_context.state.get("email_alerts", [])
+        recent_alerts = [
+            alert for alert in email_alerts 
+            if alert.get("user_id") == user_id and 
+            (datetime.now() - datetime.fromisoformat(alert.get("timestamp", "1970-01-01"))).total_seconds() < 3600  # Last hour
+        ]
+        
+        if len(recent_alerts) >= 3:  # Max 3 emails per user per hour
+            print(f"[EMAIL ALERT] Rate limit exceeded for user {user_id}")
+            return {
+                "action": "send_support_email",
+                "status": "rate_limited",
+                "message": "Email rate limit exceeded. Please wait before sending more notifications."
             }
         
         # Create email content
@@ -99,11 +138,12 @@ def send_support_email(user_id: str, user_email: str, repeated_issue: str, origi
             email_status = "sent"
             
         except Exception as email_error:
-            print(f"[EMAIL ALERT] ❌ Failed to send email: {email_error}")
+            print(f"[EMAIL ALERT] ❌ Failed to send email: Authentication or connection error")
             print(f"[EMAIL ALERT] 📝 Email content logged for manual review")
             print(f"[EMAIL ALERT] To: {support_email}")
             print(f"[EMAIL ALERT] Subject: {subject}")
             print(f"[EMAIL ALERT] Body preview: {body[:200]}...")
+            # Do not log actual email_error as it may contain credentials
             email_status = "failed"
         
         # Store email alert in session state for tracking
@@ -129,9 +169,9 @@ def send_support_email(user_id: str, user_email: str, repeated_issue: str, origi
         }
         
     except Exception as e:
-        print(f"[Support Email Tool] Error: {e}")
+        print(f"[Support Email Tool] Error: Email configuration or authentication issue")
         return {
             "action": "send_support_email",
             "status": "error",
-            "message": f"Failed to send support email: {str(e)}"
+            "message": "Failed to send support email: Email configuration or authentication issue"
         } 

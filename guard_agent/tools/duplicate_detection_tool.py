@@ -79,11 +79,11 @@ def detect_duplicate_issues(user_input: str, user_id: str, tool_context: ToolCon
         for incident in open_incidents:
             existing_hash = _create_issue_hash(incident['description'])
             
-            # Check for similarity using various methods
-            similarity_score = _calculate_similarity(user_input.lower(), incident['description'].lower())
+            # Check for similarity using enhanced methods
+            similarity_score = _calculate_enhanced_similarity(user_input.lower(), incident['description'].lower())
             
-            # Consider it a duplicate if similarity > 70% or hashes match
-            if similarity_score > 0.7 or current_input_hash == existing_hash:
+            # Lowered threshold to 50% and added exact hash matching
+            if similarity_score > 0.5 or current_input_hash == existing_hash:
                 duplicates_found.append({
                     "incident_id": incident['id'],
                     "description": incident['description'],
@@ -151,6 +151,62 @@ def _create_issue_hash(text: str) -> str:
     
     # Create hash
     return hashlib.md5(normalized.encode()).hexdigest()[:8]
+
+
+def _calculate_enhanced_similarity(text1: str, text2: str) -> float:
+    """Calculate enhanced similarity between two texts with semantic patterns."""
+    # Basic word overlap
+    words1 = set(text1.split())
+    words2 = set(text2.split())
+    
+    if not words1 or not words2:
+        return 0.0
+    
+    # Base similarity using word overlap
+    intersection = words1.intersection(words2)
+    union = words1.union(words2)
+    base_similarity = len(intersection) / len(union) if union else 0.0
+    
+    # Semantic similarity patterns
+    semantic_bonus = 0.0
+    
+    # Define semantic equivalence groups
+    login_terms = {'login', 'signin', 'sign-in', 'log-in', 'access', 'authenticate'}
+    password_terms = {'password', 'pass', 'pwd', 'reset', 'forgot'}
+    account_terms = {'account', 'profile', 'user'}
+    locked_terms = {'locked', 'blocked', 'disabled', 'suspended', 'frozen'}
+    unable_terms = {'unable', 'cannot', 'can\'t', 'failed', 'error', 'issue', 'problem'}
+    game_terms = {'game', 'play', 'gaming', 'playing'}
+    
+    semantic_groups = [login_terms, password_terms, account_terms, locked_terms, unable_terms, game_terms]
+    
+    # Check for semantic matches between groups
+    for group in semantic_groups:
+        group1_match = bool(words1.intersection(group))
+        group2_match = bool(words2.intersection(group))
+        
+        if group1_match and group2_match:
+            semantic_bonus += 0.3  # 30% bonus for each semantic group match
+    
+    # Common phrase patterns
+    phrase_patterns = [
+        (['cannot', 'login'], ['unable', 'access']),
+        (['password', 'reset'], ['forgot', 'password']),
+        (['account', 'locked'], ['cannot', 'access']),
+        (['unable', 'play'], ['game', 'not', 'working']),
+        (['doxxing', 'user'], ['user', 'information', 'exposed']),
+    ]
+    
+    for pattern1, pattern2 in phrase_patterns:
+        if all(word in text1 for word in pattern1) and all(word in text2 for word in pattern2):
+            semantic_bonus += 0.4  # 40% bonus for phrase pattern matches
+        elif all(word in text2 for word in pattern1) and all(word in text1 for word in pattern2):
+            semantic_bonus += 0.4
+    
+    # Calculate final similarity (cap at 1.0)
+    final_similarity = min(1.0, base_similarity + semantic_bonus)
+    
+    return final_similarity
 
 
 def _calculate_similarity(text1: str, text2: str) -> float:

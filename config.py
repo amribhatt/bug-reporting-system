@@ -73,11 +73,11 @@ AGENT_CONFIG = {
 
 # Email Configuration
 EMAIL_CONFIG = {
-    "support_email": os.getenv("SUPPORT_EMAIL", "amrita2500@gmail.com"),
+            "support_email": os.getenv("SUPPORT_EMAIL", "support@example.com"),
     "sender_email": os.getenv("EMAIL_USER", "noreply@example.com"),
     "smtp_server": os.getenv("SMTP_SERVER", "smtp.gmail.com"),
     "smtp_port": int(os.getenv("SMTP_PORT", "587")),
-    "email_password": os.getenv("EMAIL_PASSWORD", "your_password"),
+    "email_password": os.getenv("EMAIL_PASSWORD"),  # No default - must be set via env
     "email_enabled": os.getenv("EMAIL_ENABLED", "false").lower() == "true",
     "max_email_alerts": 50,  # Keep last 50 email alerts in memory
 }

@@ -111,14 +111,8 @@ async def display_state(
         print(f"👤 User: {user_name}")
         print(f"📧 Email: {user_email}")
 
-        # Handle bug reports with table formatting
-        bug_reports = session.state.get("bug_reports", [])
-        print("🐛 Bug Reports:")
-        if bug_reports:
-            table = format_bug_reports_table(bug_reports)
-            print(table)
-        else:
-            print("   No bug reports found.")
+        # Note: Bug reports table removed from state display as requested
+        # Users can view reports by asking "show my bug reports"
 
         print("-" * (22 + len(label)))
     except Exception as e:
@@ -188,14 +182,7 @@ async def call_agent_async(runner, user_id, session_id, query):
     )
     final_response_text = None
 
-    # Display state before processing
-    await display_state(
-        runner.session_service,
-        runner.app_name,
-        user_id,
-        session_id,
-        "State BEFORE processing",
-    )
+    # State display removed as requested
 
     try:
         async for event in runner.run_async(
@@ -208,14 +195,7 @@ async def call_agent_async(runner, user_id, session_id, query):
     except Exception as e:
         print(f"Error during agent call: {e}")
 
-    # Display state after processing the message
-    await display_state(
-        runner.session_service,
-        runner.app_name,
-        user_id,
-        session_id,
-        "State AFTER processing",
-    )
+    # State display removed as requested
 
     return final_response_text
 
@@ -233,14 +213,7 @@ async def call_agent_async_with_callbacks(runner, user_id, session_id, query):
     )
     final_response_text = None
 
-    # Display state before processing
-    await display_state(
-        runner.session_service,
-        runner.app_name,
-        user_id,
-        session_id,
-        "State BEFORE processing",
-    )
+    # State display removed as requested
 
     # Get user information for callbacks
     try:
@@ -302,13 +275,6 @@ async def call_agent_async_with_callbacks(runner, user_id, session_id, query):
     except Exception as e:
         print(f"Error during agent call: {e}")
 
-    # Display state after processing the message
-    await display_state(
-        runner.session_service,
-        runner.app_name,
-        user_id,
-        session_id,
-        "State AFTER processing",
-    )
+    # State display removed as requested
 
     return final_response_text 
