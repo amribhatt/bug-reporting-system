@@ -28,7 +28,7 @@ cd bug_reporting_system
 
 **⚠️ Important:** Make sure you're in the `bug_reporting_system` directory before proceeding. Your terminal should show:
 ```
-your-path/examples/bug_reporting_system>
+your-path/bug_reporting_system>
 ```
 
 ### **1.2 Create Virtual Environment**
