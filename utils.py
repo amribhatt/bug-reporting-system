@@ -217,4 +217,98 @@ async def call_agent_async(runner, user_id, session_id, query):
         "State AFTER processing",
     )
 
+    return final_response_text
+
+
+async def call_agent_async_with_callbacks(runner, user_id, session_id, query):
+    """
+    Enhanced agent call with pre and post callback support.
+    This version integrates with the Guard Agent callbacks for duplicate detection and level assignment.
+    """
+    from bug_reporting_agent.agent import get_bug_reporting_callbacks
+    
+    content = types.Content(role="user", parts=[types.Part(text=query)])
+    print(
+        f"\n{Colors.BG_GREEN}{Colors.BLACK}{Colors.BOLD}--- Processing with Callbacks: {query} ---{Colors.RESET}"
+    )
+    final_response_text = None
+
+    # Display state before processing
+    await display_state(
+        runner.session_service,
+        runner.app_name,
+        user_id,
+        session_id,
+        "State BEFORE processing",
+    )
+
+    # Get user information for callbacks
+    try:
+        session = await runner.session_service.get_session(
+            app_name=runner.app_name, user_id=user_id, session_id=session_id
+        )
+        user_email = session.state.get("user_email", "") if session else ""
+    except:
+        user_email = ""
+
+    # PRE-AGENT CALLBACK: Check for duplicates
+    callbacks = get_bug_reporting_callbacks()
+    pre_callback_result = callbacks.pre_agent_callback(query, user_id, user_email)
+    
+    if not pre_callback_result.get("proceed", True):
+        # Duplicate detected - don't proceed with bug report creation
+        print(f"\n{Colors.BG_YELLOW}{Colors.BLACK}{Colors.BOLD}=== DUPLICATE DETECTED ==={Colors.RESET}")
+        
+        if pre_callback_result.get("is_repeated_issue"):
+            print(f"{Colors.RED}{Colors.BOLD}🚨 REPEATED ISSUE ALERT 🚨{Colors.RESET}")
+            print(f"{Colors.YELLOW}Support team has been notified about this recurring problem.{Colors.RESET}")
+        
+        print(f"{Colors.CYAN}{pre_callback_result.get('summary', '')}{Colors.RESET}")
+        
+        # Display message to user instead of creating bug report
+        duplicate_message = pre_callback_result.get("message", "Duplicate issue detected")
+        print(f"\n{Colors.BG_BLUE}{Colors.WHITE}{Colors.BOLD}╔══ BUG REPORTING AGENT ═══════════════════════════════════{Colors.RESET}")
+        print(f"{Colors.CYAN}{Colors.BOLD}{duplicate_message}{Colors.RESET}")
+        print(f"{Colors.BG_BLUE}{Colors.WHITE}{Colors.BOLD}╚════════════════════════════════════════════════════════════{Colors.RESET}\n")
+        
+        return duplicate_message
+
+    try:
+        # Proceed with normal agent processing
+        async for event in runner.run_async(
+            user_id=user_id, session_id=session_id, new_message=content
+        ):
+            # Process each event and get the final response if available
+            response = await process_agent_response(event)
+            if response:
+                final_response_text = response
+                
+                # POST-AGENT CALLBACK: Check if a bug report was created and trigger level assignment
+                if "bug report" in response.lower() and "created successfully" in response.lower():
+                    # Extract incident ID from response if possible
+                    import re
+                    bug_id_match = re.search(r'BUG-\d+', response)
+                    if bug_id_match:
+                        bug_id = bug_id_match.group()
+                        print(f"\n{Colors.BG_MAGENTA}{Colors.WHITE}{Colors.BOLD}🔄 Triggering Post-Callback for {bug_id}{Colors.RESET}")
+                        
+                        post_callback_result = callbacks.post_agent_callback(bug_id, query)
+                        
+                        if post_callback_result.get("status") == "success":
+                            print(f"{Colors.GREEN}✅ Guard Agent triggered for level assignment{Colors.RESET}")
+                        else:
+                            print(f"{Colors.YELLOW}⚠️ {post_callback_result.get('message', 'Post-callback warning')}{Colors.RESET}")
+                
+    except Exception as e:
+        print(f"Error during agent call: {e}")
+
+    # Display state after processing the message
+    await display_state(
+        runner.session_service,
+        runner.app_name,
+        user_id,
+        session_id,
+        "State AFTER processing",
+    )
+
     return final_response_text 

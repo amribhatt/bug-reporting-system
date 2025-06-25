@@ -3,9 +3,9 @@ import asyncio
 from dotenv import load_dotenv
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
-from bug_reporting_agent.agent import bug_reporting_agent
+from bug_reporting_agent.agent import bug_reporting_agent, set_guard_agent_callback, get_bug_reporting_callbacks
 from guard_agent.agent import GuardAgent, _guard_agent_a2a_callback
-from utils import call_agent_async
+from utils import call_agent_async, call_agent_async_with_callbacks
 from config import get_database_name, get_default_user_id, AGENT_CONFIG
 from a2a_integration import initialize_a2a_agents, register_guard_agent_callback
 
@@ -32,11 +32,15 @@ async def main_async():
     APP_NAME = "Bug Reporting Agent"
     USER_ID = get_default_user_id()
     
-    # Initialize A2A protocol and register Guard agent callback
+    # Initialize A2A protocol and register enhanced Guard agent callback
     print("🔧 Initializing A2A protocol...")
     initialize_a2a_agents()
     register_guard_agent_callback(_guard_agent_a2a_callback)
-    print("✅ A2A protocol initialized with Guard agent callback")
+    
+    # Set up callback integration between Bug Reporting Agent and Guard Agent
+    set_guard_agent_callback(_guard_agent_a2a_callback)
+    print("✅ A2A protocol initialized with Enhanced Guard agent callback")
+    print("✅ Bug Reporting Agent callbacks configured")
 
     # ===== PART 3: Session Management - Find or Create =====
     # Check for existing sessions for this user
@@ -94,8 +98,8 @@ async def main_async():
             print("Feel free to come back anytime if you encounter more issues.")
             break
 
-        # Process the user query through the agent
-        await call_agent_async(runner, USER_ID, SESSION_ID, user_input)
+        # Process the user query through the enhanced agent with callbacks
+        await call_agent_async_with_callbacks(runner, USER_ID, SESSION_ID, user_input)
 
 
 if __name__ == "__main__":

@@ -79,8 +79,22 @@ The Guard Agent classifies user inputs into these 5 levels:
 - **Level definitions** and descriptions
 - **Guard Agent settings**
 - **A2A protocol configuration**
+- **Email settings** for support notifications
 
 ## 🔧 Usage
+
+### Quick Start
+
+```bash
+# 1. Set up environment (choose one method):
+python setup_env.py          # Interactive setup
+# OR
+cp env_config.example .env    # Manual setup
+
+# 2. Configure your settings in .env file
+# 3. Start the system
+python main.py
+```
 
 ### Running the Enhanced System
 
@@ -168,6 +182,141 @@ python-dateutil>=2.8.2
 - **Human-in-the-loop** - Manual review for high-level issues
 - **Integration APIs** - REST endpoints for external systems
 - **Dashboard** - Real-time monitoring and analytics
+
+## ⚙️ Configuration
+
+### Quick Setup
+
+Use the automated setup script to get started quickly:
+
+```bash
+# Run the interactive setup script
+python setup_env.py
+
+# Follow the prompts to configure:
+# - Google API Key (required)
+# - Email settings
+# - Debug mode
+# - Other essential settings
+```
+
+### Manual Configuration
+
+The system uses a single comprehensive environment file for all configuration. All settings can be customized via environment variables:
+
+```bash
+# Copy the example configuration
+cp env_config.example .env
+
+# Edit .env with your actual values - all settings in one place:
+```
+
+**Complete Environment Variables:**
+
+| Category | Variable | Description | Default |
+|----------|----------|-------------|---------|
+| **API** | `GOOGLE_API_KEY` | Google API key (required) | - |
+| **Email** | `SUPPORT_EMAIL` | Support team email address | `support@example.com` |
+| **Email** | `EMAIL_USER` | Sender email address | `noreply@example.com` |
+| **Email** | `SMTP_SERVER` | SMTP server hostname | `smtp.gmail.com` |
+| **Email** | `SMTP_PORT` | SMTP server port | `587` |
+| **Email** | `EMAIL_PASSWORD` | Email account password | `your_password` |
+| **Email** | `EMAIL_ENABLED` | Enable email notifications | `false` |
+| **App** | `DEBUG` | Debug mode | `false` |
+| **App** | `LOG_LEVEL` | Logging level | `INFO` |
+| **Agent** | `MODEL_NAME` | AI model to use | `gemini-2.0-flash` |
+| **Agent** | `AGENT_TIMEOUT` | Agent timeout (seconds) | `30` |
+| **Agent** | `AGENT_MAX_RETRIES` | Maximum retries | `3` |
+| **Database** | `DB_NAME` | Database filename | `bug_reports.db` |
+| **Database** | `DB_BACKUP_ENABLED` | Enable backups | `true` |
+| **Database** | `DB_BACKUP_INTERVAL` | Backup interval (hours) | `24` |
+| **Security** | `SESSION_TIMEOUT` | Session timeout (minutes) | `60` |
+| **Security** | `MAX_REPORTS_PER_USER` | Max reports per user | `1000` |
+
+**Key Features:**
+- **Single configuration file** - All settings in one `.env` file
+- **Environment variable driven** - Easy deployment and configuration management
+- **Automatic loading** - System automatically loads `.env` file if present
+- **Sensible defaults** - Works out of the box with minimal configuration
+- **Full customization** - Every aspect configurable via environment variables
+
+## 🚀 Production Deployment
+
+### Production Structure
+
+```
+bug_reporting_system/
+├── __init__.py                 # Package initialization
+├── run.py                      # Production entry point
+├── main.py                     # Core application logic
+├── config.py                   # Configuration management
+├── database.py                 # Database operations
+├── utils.py                    # Utility functions
+├── a2a_integration.py          # A2A protocol integration
+├── setup_env.py               # Environment setup utility
+├── requirements.txt           # Python dependencies
+├── env_config.example         # Environment configuration template
+├── .gitignore                 # Git ignore rules
+├── bug_reporting_agent/       # Bug reporting agent module
+│   ├── __init__.py
+│   └── agent.py
+└── guard_agent/               # Guard agent module
+    ├── __init__.py
+    ├── agent.py
+    └── tools/                 # Guard agent tools
+        ├── __init__.py
+        ├── level_assignment_tool.py
+        ├── duplicate_detection_tool.py
+        ├── support_email_tool.py
+        └── analysis_tools.py
+```
+
+### Production Deployment Steps
+
+1. **Environment Setup**
+   ```bash
+   # Clone/copy the system
+   git clone <repository> bug_reporting_system
+   cd bug_reporting_system
+   
+   # Set up Python environment
+   python -m venv .venv
+   .venv\Scripts\activate  # Windows
+   # source .venv/bin/activate  # Linux/Mac
+   
+   # Install dependencies
+   pip install -r requirements.txt
+   ```
+
+2. **Configuration**
+   ```bash
+   # Interactive setup (recommended)
+   python setup_env.py
+   
+   # Or manual setup
+   cp env_config.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Production Run**
+   ```bash
+   # Production entry point
+   python run.py
+   
+   # Or direct run
+   python main.py
+   ```
+
+### Production Checklist
+
+- ✅ **Environment configured** - `.env` file with all required settings
+- ✅ **Dependencies installed** - All packages from `requirements.txt`
+- ✅ **Google API Key set** - Required for Gemini model
+- ✅ **Email configured** - If using email notifications
+- ✅ **Database permissions** - Write access for SQLite database
+- ✅ **Backup strategy** - Regular database backups configured
+- ✅ **Monitoring setup** - Log monitoring and error alerting
+- ✅ **Security review** - API keys secured, access controls in place
 
 ---
 

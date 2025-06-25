@@ -5,19 +5,27 @@ Configuration settings for the Bug Reporting Agent system.
 import os
 from typing import Dict, Any
 
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not installed, skip loading .env file
+    pass
+
 # User Configuration
 USER_CONFIG = {
     "default_user_id": "user001",
-    "session_timeout_minutes": 60,
-    "max_bug_reports_per_user": 1000,
+    "session_timeout_minutes": int(os.getenv("SESSION_TIMEOUT", "60")),
+    "max_bug_reports_per_user": int(os.getenv("MAX_REPORTS_PER_USER", "1000")),
 }
 
 # Database Configuration
 DATABASE_CONFIG = {
-    "db_name": "bug_reports.db",
+    "db_name": os.getenv("DB_NAME", "bug_reports.db"),
     "table_name": "incidents",
-    "backup_enabled": True,
-    "backup_interval_hours": 24,
+    "backup_enabled": os.getenv("DB_BACKUP_ENABLED", "true").lower() == "true",
+    "backup_interval_hours": int(os.getenv("DB_BACKUP_INTERVAL", "24")),
 }
 
 # Bug Report Configuration
@@ -50,17 +58,28 @@ DATE_CONFIG = {
 # UI Configuration
 UI_CONFIG = {
     "colors_enabled": True,
-    "show_debug_info": False,
+    "show_debug_info": os.getenv("DEBUG", "false").lower() == "true",
     "table_width": 120,
     "max_description_length": 100,  # For table display
 }
 
 # Agent Configuration
 AGENT_CONFIG = {
-    "model": "gemini-2.0-flash",
+    "model": os.getenv("MODEL_NAME", "gemini-2.0-flash"),
     "agent_name": "bug_reporting_agent",
-    "max_retries": 3,
-    "timeout_seconds": 30,
+    "max_retries": int(os.getenv("AGENT_MAX_RETRIES", "3")),
+    "timeout_seconds": int(os.getenv("AGENT_TIMEOUT", "30")),
+}
+
+# Email Configuration
+EMAIL_CONFIG = {
+    "support_email": os.getenv("SUPPORT_EMAIL", "amrita2500@gmail.com"),
+    "sender_email": os.getenv("EMAIL_USER", "noreply@example.com"),
+    "smtp_server": os.getenv("SMTP_SERVER", "smtp.gmail.com"),
+    "smtp_port": int(os.getenv("SMTP_PORT", "587")),
+    "email_password": os.getenv("EMAIL_PASSWORD", "your_password"),
+    "email_enabled": os.getenv("EMAIL_ENABLED", "false").lower() == "true",
+    "max_email_alerts": 50,  # Keep last 50 email alerts in memory
 }
 
 # Environment Variables
@@ -82,6 +101,7 @@ def get_config() -> Dict[str, Any]:
         "date": DATE_CONFIG,
         "ui": UI_CONFIG,
         "agent": AGENT_CONFIG,
+        "email": EMAIL_CONFIG,
         "env": get_env_config(),
     }
     return config
@@ -119,4 +139,22 @@ def get_bug_levels():
 
 def get_default_level():
     """Get default bug level."""
-    return BUG_REPORT_CONFIG["default_level"] 
+    return BUG_REPORT_CONFIG["default_level"]
+
+def get_email_config(key: str | None = None):
+    """Get email configuration value."""
+    if key:
+        return EMAIL_CONFIG.get(key)
+    return EMAIL_CONFIG
+
+def get_support_email():
+    """Get support team email address."""
+    return EMAIL_CONFIG["support_email"]
+
+def get_sender_email():
+    """Get sender email address."""
+    return EMAIL_CONFIG["sender_email"]
+
+def is_email_enabled():
+    """Check if email notifications are enabled."""
+    return EMAIL_CONFIG["email_enabled"] 

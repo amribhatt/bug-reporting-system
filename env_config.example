@@ -1,0 +1,77 @@
+# Bug Reporting System - Complete Environment Configuration
+# Copy this file to .env and update with your actual values
+
+# =============================================================================
+# GOOGLE API CONFIGURATION (Required)
+# =============================================================================
+GOOGLE_API_KEY=your_google_api_key_here
+
+# =============================================================================
+# EMAIL CONFIGURATION
+# =============================================================================
+# Support team email address (where alerts are sent)
+SUPPORT_EMAIL=support@yourcompany.com
+
+# Sender email address (from address for notifications)
+EMAIL_USER=bug-reports@yourcompany.com
+
+# SMTP server configuration
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+
+# Email authentication (use app password for Gmail)
+EMAIL_PASSWORD=your_app_password_here
+
+# Enable/disable email notifications (true/false)
+EMAIL_ENABLED=false
+
+# =============================================================================
+# APPLICATION CONFIGURATION
+# =============================================================================
+# Debug mode (true/false)
+DEBUG=false
+
+# Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+LOG_LEVEL=INFO
+
+# =============================================================================
+# AGENT CONFIGURATION
+# =============================================================================
+# AI model to use
+MODEL_NAME=gemini-2.0-flash
+
+# Agent timeout in seconds
+AGENT_TIMEOUT=30
+
+# Maximum retries for agent calls
+AGENT_MAX_RETRIES=3
+
+# =============================================================================
+# DATABASE CONFIGURATION
+# =============================================================================
+# Database file name
+DB_NAME=bug_reports.db
+
+# Enable database backups (true/false)
+DB_BACKUP_ENABLED=true
+
+# Backup interval in hours
+DB_BACKUP_INTERVAL=24
+
+# =============================================================================
+# SECURITY CONFIGURATION
+# =============================================================================
+# Session timeout in minutes
+SESSION_TIMEOUT=60
+
+# Maximum bug reports per user
+MAX_REPORTS_PER_USER=1000
+
+# =============================================================================
+# USAGE INSTRUCTIONS
+# =============================================================================
+# 1. Copy this file: cp env_config.example .env
+# 2. Update the values above with your actual configuration
+# 3. Ensure GOOGLE_API_KEY is set for the system to work
+# 4. Set EMAIL_ENABLED=true and configure SMTP settings for email alerts
+# 5. The system will automatically load these environment variables 

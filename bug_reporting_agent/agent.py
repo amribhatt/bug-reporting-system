@@ -6,6 +6,8 @@ from dateutil.relativedelta import relativedelta
 import sys
 import os
 import re
+import sqlite3
+from typing import Dict, Any, Optional
 
 # Add the parent directory to the path to import database module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -350,6 +352,217 @@ def update_user_info(name: str, email: str, tool_context: ToolContext) -> dict:
     }
 
 
+# Enhanced Bug Reporting Agent with Callbacks
+class BugReportingAgentCallbacks:
+    """Callback system for the Bug Reporting Agent to integrate with Guard Agent."""
+    
+    def __init__(self):
+        self.guard_agent_callback = None
+        self.pre_callback_checks = 0
+        self.post_callback_triggers = 0
+        self.duplicates_prevented = 0
+        self.repeated_issues_detected = 0
+    
+    def set_guard_agent_callback(self, guard_callback):
+        """Set the Guard Agent callback handler."""
+        self.guard_agent_callback = guard_callback
+        print("[Bug Reporting Callbacks] Guard Agent callback registered")
+    
+    def pre_agent_callback(self, user_input: str, user_id: str, user_email: str = "") -> Dict[str, Any]:
+        """
+        Pre-agent callback to check for duplicates before creating bug reports.
+        This is called before the bug reporting agent processes the user input.
+        
+        Args:
+            user_input: The user's input describing their issue
+            user_id: The user's ID
+            user_email: The user's email address
+            
+        Returns:
+            Dictionary containing pre-callback results and whether to proceed
+        """
+        print(f"[Bug Reporting Pre-Callback] Checking user input for user {user_id}")
+        self.pre_callback_checks += 1
+        
+        if not self.guard_agent_callback:
+            print("[Bug Reporting Pre-Callback] Warning: Guard Agent callback not available")
+            return {
+                "proceed": True,
+                "message": "No guard agent available - proceeding with bug report creation"
+            }
+        
+        try:
+            # Check for duplicates using Guard Agent
+            duplicate_result = self.guard_agent_callback.check_for_duplicates(user_input, user_id)
+            
+            if duplicate_result.get("is_duplicate"):
+                self.duplicates_prevented += 1
+                
+                # Check if this is a repeated issue after resolution
+                duplicate_incident_id = duplicate_result.get("duplicate_incident_id")
+                
+                if duplicate_incident_id:
+                    # Check if user has a resolved incident with same description
+                    resolved_incident = self._check_for_resolved_similar_incident(user_input, user_id, duplicate_incident_id)
+                    
+                    if resolved_incident:
+                        # This is a repeated issue after resolution - send support email
+                        self.repeated_issues_detected += 1
+                        self.guard_agent_callback.handle_repeated_issue(
+                            user_id, user_email, user_input, resolved_incident['id']
+                        )
+                        
+                        return {
+                            "proceed": False,
+                            "is_duplicate": True,
+                            "is_repeated_issue": True,
+                            "duplicate_incident_id": duplicate_incident_id,
+                            "resolved_incident_id": resolved_incident['id'],
+                            "summary": duplicate_result.get("summary", ""),
+                            "message": f"Repeated issue detected! Support team has been notified about this recurring problem. Original incident {resolved_incident['id']} was marked as resolved, but you're experiencing the same issue again.",
+                            "support_notified": True
+                        }
+                
+                return {
+                    "proceed": False,
+                    "is_duplicate": True,
+                    "is_repeated_issue": False,
+                    "duplicate_incident_id": duplicate_incident_id,
+                    "summary": duplicate_result.get("summary", ""),
+                    "message": duplicate_result.get("message", "Duplicate issue detected"),
+                    "similarity_score": duplicate_result.get("similarity_score", 0)
+                }
+            
+            return {
+                "proceed": True,
+                "is_duplicate": False,
+                "message": "No duplicates detected - proceeding with bug report creation"
+            }
+            
+        except Exception as e:
+            print(f"[Bug Reporting Pre-Callback] Error: {e}")
+            return {
+                "proceed": True,
+                "message": f"Error in pre-callback check: {str(e)} - proceeding with bug report creation"
+            }
+    
+    def post_agent_callback(self, incident_id: str, user_input: str) -> Dict[str, Any]:
+        """
+        Post-agent callback to trigger Guard Agent level assignment after bug report creation.
+        This is called after the bug reporting agent successfully creates a bug report.
+        
+        Args:
+            incident_id: The ID of the created incident
+            user_input: The original user input that led to the bug report
+            
+        Returns:
+            Dictionary containing post-callback results
+        """
+        print(f"[Bug Reporting Post-Callback] Triggering level assignment for incident {incident_id}")
+        self.post_callback_triggers += 1
+        
+        if not self.guard_agent_callback:
+            print("[Bug Reporting Post-Callback] Warning: Guard Agent callback not available")
+            return {
+                "status": "warning",
+                "message": "Guard Agent callback not available - incident level not updated"
+            }
+        
+        try:
+            # Trigger Guard Agent to classify and update incident level
+            self.guard_agent_callback.classify_and_update_incident(incident_id, user_input)
+            
+            return {
+                "status": "success",
+                "message": f"Guard Agent triggered to assign level for incident {incident_id}",
+                "incident_id": incident_id
+            }
+            
+        except Exception as e:
+            print(f"[Bug Reporting Post-Callback] Error: {e}")
+            return {
+                "status": "error",
+                "message": f"Error in post-callback: {str(e)}"
+            }
+    
+    def _check_for_resolved_similar_incident(self, user_input: str, user_id: str, exclude_incident_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Check if user has a resolved incident similar to the current input.
+        
+        Args:
+            user_input: Current user input
+            user_id: User's ID
+            exclude_incident_id: Incident ID to exclude from search
+            
+        Returns:
+            Dictionary of resolved incident if found, None otherwise
+        """
+        try:
+            db = IncidentDatabase()
+            
+            with sqlite3.connect(db.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute("""
+                    SELECT * FROM incidents 
+                    WHERE user_id = ? AND status IN ('Resolved', 'Closed') AND id != ?
+                    ORDER BY date_created DESC
+                """, (user_id, exclude_incident_id))
+                
+                for row in cursor.fetchall():
+                    resolved_incident = dict(row)
+                    
+                    # Calculate similarity with resolved incident
+                    similarity = self._calculate_simple_similarity(
+                        user_input.lower(), resolved_incident['description'].lower()
+                    )
+                    
+                    # If similarity > 60%, consider it the same issue
+                    if similarity > 0.6:
+                        return resolved_incident
+            
+            return None
+            
+        except Exception as e:
+            print(f"[Bug Reporting Callbacks] Error checking resolved incidents: {e}")
+            return None
+    
+    def _calculate_simple_similarity(self, text1: str, text2: str) -> float:
+        """Calculate simple similarity between two texts."""
+        words1 = set(text1.split())
+        words2 = set(text2.split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        intersection = words1.intersection(words2)
+        union = words1.union(words2)
+        
+        return len(intersection) / len(union) if union else 0.0
+    
+    def get_metrics(self) -> Dict[str, Any]:
+        """Get callback metrics."""
+        return {
+            "pre_callback_checks": self.pre_callback_checks,
+            "post_callback_triggers": self.post_callback_triggers,
+            "duplicates_prevented": self.duplicates_prevented,
+            "repeated_issues_detected": self.repeated_issues_detected
+        }
+
+
+# Global callback handler for Bug Reporting Agent
+_bug_reporting_agent_callbacks = BugReportingAgentCallbacks()
+
+
+def get_bug_reporting_callbacks() -> BugReportingAgentCallbacks:
+    """Get the Bug Reporting Agent callbacks handler."""
+    return _bug_reporting_agent_callbacks
+
+
+def set_guard_agent_callback(guard_callback):
+    """Set the Guard Agent callback for the Bug Reporting Agent."""
+    _bug_reporting_agent_callbacks.set_guard_agent_callback(guard_callback)
+
+
 # Create the bug reporting agent
 bug_reporting_agent = Agent(
     name=AGENT_CONFIG["agent_name"],
@@ -434,6 +647,12 @@ bug_reporting_agent = Agent(
     - If you don't have their contact info, collect their name and email
     - Keep conversation friendly and solution-focused
     - **ALWAYS display bug reports in a clean tabular format** when showing them to users
+
+    **CALLBACK INTEGRATION:**
+    - The system now includes advanced duplicate detection and level assignment
+    - Guard Agent will automatically classify issues and assign severity levels
+    - Duplicate issues will be detected and users will be guided appropriately
+    - Support team will be automatically notified for recurring issues
 
     **SAMPLE RESPONSES:**
     - "I'm sorry to hear you're experiencing this issue. That must be frustrating! Let me help you create a proper bug report so our team can address this."
